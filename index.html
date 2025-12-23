@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Flat Hisab - Cloud Pro</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    
+    <style>
+        :root { --primary: #1877f2; --success: #28a745; --danger: #dc3545; --warning: #ffc107; --light: #f8f9fa; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 10px; -webkit-tap-highlight-color: transparent; }
+        .container { max-width: 1100px; margin: auto; background: white; padding: 15px; border-radius: 15px; box-shadow: 0 5px 25px rgba(0,0,0,0.1); }
+        h2, h3 { color: #333; border-left: 5px solid var(--primary); padding-left: 10px; margin-top: 0; font-size: 1.1rem; }
+        .grid-layout { display: flex; flex-direction: column; gap: 15px; }
+        .card { background: var(--light); padding: 15px; border-radius: 12px; border: 1px solid #ddd; position: relative; margin-bottom: 10px; }
+        .edit-mode-indicator { display: none; background: var(--warning); color: black; padding: 5px; font-size: 12px; font-weight: bold; border-radius: 5px; margin-bottom: 10px; text-align: center; }
+        .input-row { margin-bottom: 12px; }
+        .input-row label { display: block; font-weight: bold; font-size: 13px; margin-bottom: 5px; }
+        input[type="number"], input[type="text"], input[type="date"], select { padding: 12px; border: 1px solid #ccc; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 16px; }
+        .person-row { display: flex; align-items: center; gap: 10px; background: white; padding: 8px; border-radius: 8px; border: 1px solid #eee; margin-bottom: 6px; }
+        .person-row input[type="number"] { width: 80px; padding: 8px; text-align: right; }
+        .history-container { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; background: white; font-size: 12px; min-width: 500px; }
+        th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+        th { background: #f1f1f1; color: #444; position: sticky; top: 0; }
+        .breakdown { font-size: 10px; color: #666; margin-top: 4px; display: block; background: #fafafa; padding: 4px; border-radius: 4px; }
+        .excluded { opacity: 0.5; text-decoration: line-through; background: #ffebeb !important; }
+        .payment-row { background: #e8f5e9 !important; }
+        .btn { border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-weight: bold; color: white; width: 100%; margin-top: 5px; font-size: 15px; }
+        .btn-add { background: var(--success); }
+        .btn-update { background: var(--warning); color: black; display: none; }
+        .btn-pay { background: var(--primary); }
+        .btn-cancel { background: #ccc; color: black; display: none; margin-top: 5px; }
+        .action-btns { display: flex; gap: 4px; }
+        .del-btn { background: #fee; color: var(--danger); border: 1px solid var(--danger); padding: 5px; border-radius: 4px; font-weight: bold; font-size: 10px; }
+        .edit-btn { background: #eef; color: var(--primary); border: 1px solid var(--primary); padding: 5px; border-radius: 4px; font-weight: bold; font-size: 10px; }
+        .summary-card { background: white; padding: 12px; border: 2px solid #eee; border-radius: 12px; margin-bottom: 10px; }
+        .status-positive { color: var(--success); font-weight: bold; }
+        .status-negative { color: var(--danger); font-weight: bold; }
+        .settle-box { background: #fff3cd; padding: 12px; border-radius: 12px; border: 1px solid #ffeeba; font-size: 14px; }
+        .sync-label { text-align: center; font-size: 10px; color: var(--success); margin-bottom: 10px; font-weight: bold;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="text-align:center; border:none; margin-bottom:5px;">🏠 Flat Expense Manager</h2>
+    <div class="sync-label">● Cloud Connected (Real-time)</div>
+
+    <div class="grid-layout">
+        <div class="card" id="inputCard">
+            <div id="editLabel" class="edit-mode-indicator">⚠️ EDIT MODE ON</div>
+            <h3>🛒 Naya Kharcha (Expense)</h3>
+            <input type="hidden" id="editKey" value="">
+            <div class="input-row"><label>Date:</label><input type="date" id="expDate"></div>
+            <div class="input-row"><label>Item Ka Naam:</label><input type="text" id="itemName" placeholder="e.g. Doodh, WiFi"></div>
+            <div id="inputGroup">
+                <script>
+                    const names = ["Vivek Azad", "Ashwani Kumar", "Aman Kumar", "Shubham Kumar"];
+                    names.forEach((n, i) => {
+                        document.write(`<div class="person-row">
+                            <input type="checkbox" id="split${i}" checked style="transform: scale(1.2);">
+                            <span style="flex:1; font-size:14px;">${n}</span>
+                            <input type="number" id="paid${i}" placeholder="₹0" onfocus="this.select()">
+                        </div>`);
+                    });
+                </script>
+            </div>
+            <button id="saveBtn" class="btn btn-add" onclick="pushToCloud('expense')">Save to Cloud</button>
+            <button id="updateBtn" class="btn btn-update" onclick="pushToCloud('expense')">Update Entry</button>
+            <button id="cancelBtn" class="btn btn-cancel" onclick="resetInputs()">Cancel Edit</button>
+        </div>
+
+        <div class="card">
+            <h3>📜 History (Kaun, Kya, Kab)</h3>
+            <div class="history-container">
+                <table>
+                    <thead><tr><th>On</th><th>Date</th><th>Detail</th><th>Total</th><th>Action</th></tr></thead>
+                    <tbody id="historyTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <h3 style="border:none; padding:0; margin-bottom:10px;">📊 Net Balance</h3>
+            <div id="balanceList">Cloud se data aa raha hai...</div>
+        </div>
+
+        <div class="settle-box">
+            <b style="display:block; margin-bottom:8px;">🤝 Settlement (Dena/Lena):</b>
+            <div id="settlePlan">Hisab clear hai!</div>
+        </div>
+
+        <div class="card" style="border: 2px solid var(--primary); background: #f0f7ff;">
+            <h3>💸 Payment Diya/Liya</h3>
+            <div class="input-row"><label>Date:</label><input type="date" id="payDate"></div>
+            <select id="payerId" style="margin-bottom:10px;"><option value="">Kisne Diya? (Payer)</option>
+                <script>names.forEach((n,i)=>document.write(`<option value="${i}">${n}</option>`));</script></select>
+            <select id="receiverId" style="margin-bottom:10px;"><option value="">Kisko Mila? (Receiver)</option>
+                <script>names.forEach((n,i)=>document.write(`<option value="${i}">${n}</option>`));</script></select>
+            <input type="number" id="payAmt" placeholder="Kitna Paisa? (₹)" style="margin-bottom:10px;">
+            <button class="btn btn-pay" onclick="pushToCloud('payment')">Record Payment</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Firebase Configuration (Vivek's Details)
+    const firebaseConfig = {
+        apiKey: "AIzaSyALPjXedT8GWZAc9lb4CoGtDhvGiS0DBy0",
+        authDomain: "azad-744e2.firebaseapp.com",
+        databaseURL: "https://azad-744e2-default-rtdb.firebaseio.com/",
+        projectId: "azad-744e2",
+        storageBucket: "azad-744e2.firebasestorage.app",
+        messagingSenderId: "762519114347",
+        appId: "1:762519114347:web:8ebfccc4e03147f7bdd72e"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database().ref('flat_expenses_v5');
+
+    function pushToCloud(type) {
+        const editKey = document.getElementById('editKey').value;
+        let data = { type, active: true };
+
+        if (type === 'expense') {
+            data.date = document.getElementById('expDate').value;
+            data.item = document.getElementById('itemName').value;
+            data.paidAmts = []; data.splitCheck = [];
+            for(let i=0; i<4; i++) {
+                data.paidAmts.push(parseFloat(document.getElementById(`paid${i}`).value) || 0);
+                data.splitCheck.push(document.getElementById(`split${i}`).checked);
+            }
+            data.total = data.paidAmts.reduce((a,b)=>a+b, 0);
+            if(!data.item || data.total <= 0) return alert("Sahi details bharein!");
+        } else {
+            data.date = document.getElementById('payDate').value;
+            data.pId = parseInt(document.getElementById('payerId').value);
+            data.rId = parseInt(document.getElementById('receiverId').value);
+            data.amt = parseFloat(document.getElementById('payAmt').value) || 0;
+            if(isNaN(data.pId) || isNaN(data.rId) || data.pId === data.rId || data.amt <= 0) return alert("Details check karein!");
+        }
+
+        if(editKey) {
+            db.child(editKey).set(data);
+        } else {
+            db.push(data);
+        }
+        resetInputs();
+    }
+
+    db.on('value', (snapshot) => {
+        const data = snapshot.val();
+        refreshUI(data);
+    });
+
+    function refreshUI(data) {
+        const table = document.getElementById('historyTable');
+        table.innerHTML = "";
+        let netBalances = [0, 0, 0, 0];
+        if(!data) { document.getElementById('balanceList').innerHTML = "No data found."; return; }
+
+        Object.keys(data).reverse().forEach(key => {
+            const en = data[key];
+            let rowClass = en.active ? "" : "excluded";
+            
+            if (en.type === 'expense') {
+                const activeCount = en.splitCheck.filter(c=>c).length || 1;
+                const share = en.active ? (en.total / activeCount) : 0;
+                let splitDetails = names.map((n, i) => en.splitCheck[i] ? `${n.split(' ')[0]}:₹${share.toFixed(0)}` : null).filter(x=>x).join(' | ');
+                if(en.active) { for(let i=0; i<4; i++) netBalances[i] += (en.paidAmts[i] - (en.splitCheck[i] ? share : 0)); }
+
+                table.innerHTML += `<tr class="${rowClass}">
+                    <td><input type="checkbox" ${en.active?'checked':''} onclick="toggleActive('${key}', ${en.active})"></td>
+                    <td>${formatDate(en.date)}</td>
+                    <td><b>${en.item}</b><br><span class="breakdown">${splitDetails}</span></td>
+                    <td>₹${en.total}</td>
+                    <td><div class="action-btns"><button class="edit-btn" onclick="editCloud('${key}')">EDT</button><button class="del-btn" onclick="deleteCloud('${key}')">DEL</button></div></td>
+                </tr>`;
+            } else {
+                if(en.active) { netBalances[en.pId] += en.amt; netBalances[en.rId] -= en.amt; }
+                table.innerHTML += `<tr class="${rowClass} payment-row">
+                    <td><input type="checkbox" ${en.active?'checked':''} onclick="toggleActive('${key}', ${en.active})"></td>
+                    <td>${formatDate(en.date)}</td>
+                    <td>💸 ${names[en.pId].split(' ')[0]} ➔ ${names[en.rId].split(' ')[0]}</td>
+                    <td>₹${en.amt}</td>
+                    <td><button class="del-btn" onclick="deleteCloud('${key}')">DEL</button></td>
+                </tr>`;
+            }
+        });
+        updateSummary(netBalances);
+    }
+
+    function toggleActive(key, current) { db.child(key).update({ active: !current }); }
+    function deleteCloud(key) { if(confirm("Kya aap ise delete karna chahte hain?")) db.child(key).remove(); }
+    function editCloud(key) {
+        db.child(key).once('value', (s) => {
+            const en = s.val();
+            document.getElementById('editKey').value = key;
+            document.getElementById('itemName').value = en.item;
+            document.getElementById('expDate').value = en.date;
+            en.paidAmts.forEach((a, i) => {
+                document.getElementById(`paid${i}`).value = a;
+                document.getElementById(`split${i}`).checked = en.splitCheck[i];
+            });
+            document.getElementById('saveBtn').style.display = 'none';
+            document.getElementById('updateBtn').style.display = 'block';
+            document.getElementById('cancelBtn').style.display = 'block';
+            document.getElementById('editLabel').style.display = 'block';
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        });
+    }
+
+    function updateSummary(netBalances) {
+        let balHtml = "";
+        netBalances.forEach((b, i) => {
+            balHtml += `<div class="${b>=0?'status-positive':'status-negative'}" style="margin-bottom:5px;">${names[i]}: ₹${Math.abs(b).toFixed(2)} ${b>=0?'Lega':'Dega'}</div>`;
+        });
+        document.getElementById('balanceList').innerHTML = balHtml;
+
+        let payers = [], receivers = [];
+        netBalances.forEach((b, i) => {
+            if (b < -0.01) payers.push({n: names[i], a: Math.abs(b)});
+            else if (b > 0.01) receivers.push({n: names[i], a: b});
+        });
+
+        let setHtml = "";
+        let i=0, j=0;
+        while(i<payers.length && j<receivers.length) {
+            let m = Math.min(payers[i].a, receivers[j].a);
+            setHtml += `<div style="margin-bottom:5px;">🤝 <b>${payers[i].n.split(' ')[0]}</b> ➔ <b>${receivers[j].n.split(' ')[0]}</b> को <b>₹${m.toFixed(1)}</b> dega.</div>`;
+            payers[i].a -= m; receivers[j].a -= m;
+            if(payers[i].a < 0.1) i++; if(receivers[j].a < 0.1) j++;
+        }
+        document.getElementById('settlePlan').innerHTML = setHtml || "Hisab barabar hai! ✨";
+    }
+
+    function formatDate(dateStr) { return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }); }
+    
+    function resetInputs() {
+        document.getElementById('editKey').value = "";
+        document.getElementById('itemName').value = "";
+        document.getElementById('payAmt').value = "";
+        document.getElementById('saveBtn').style.display = 'block';
+        document.getElementById('updateBtn').style.display = 'none';
+        document.getElementById('cancelBtn').style.display = 'none';
+        document.getElementById('editLabel').style.display = 'none';
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('expDate').value = today;
+        document.getElementById('payDate').value = today;
+        for(let i=0; i<4; i++) {
+            document.getElementById(`paid${i}`).value = "0";
+            document.getElementById(`split${i}`).checked = true;
+        }
+    }
+    resetInputs();
+</script>
+</body>
+</html>
